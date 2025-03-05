@@ -1,0 +1,48 @@
+/* General styling */
+body {
+    font-family: Arial, sans-serif;
+    margin: 0;
+    padding: 0;
+    background-color: #f5f5f5;
+}
+
+header {
+    background-color: #3b9af4;
+    color: white;
+    padding: 20px;
+    text-align: center;
+}
+
+#speech-area {
+    text-align: center;
+    margin-top: 50px;
+}
+
+button {
+    padding: 10px 20px;
+    font-size: 16px;
+    cursor: pointer;
+    margin: 10px;
+}
+
+textarea {
+    width: 80%;
+    margin: 10px;
+    padding: 10px;
+    font-size: 16px;
+}
+
+#feedback-area {
+    margin-top: 30px;
+    padding: 20px;
+    background-color: #ffffff;
+    border-radius: 8px;
+    width: 80%;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+#feedback {
+    font-size: 18px;
+    color: #ff6347;
+}
