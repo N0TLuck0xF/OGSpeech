@@ -1,5 +1,3 @@
-// api/vapi.js
-
 export async function getRealTimeFeedback(text) {
     try {
         // Replace this with your actual VAPI endpoint
