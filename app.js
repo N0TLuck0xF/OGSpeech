@@ -6,15 +6,59 @@ document.addEventListener('DOMContentLoaded', () => {
     const statusIndicator = document.getElementById('status-indicator');
     const downloadButton = document.getElementById('download-recording');
 
-    // Check browser support
+    // Comprehensive Browser Support Check
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     
-    if (!SpeechRecognition) {
-        console.error('Speech Recognition not supported');
-        startButton.disabled = true;
-        statusIndicator.textContent = 'Browser Not Supported';
-        alert('Your browser does not support speech recognition. Please use Chrome or Edge.');
-        return;
+    // Disable start button until permissions are checked
+    startButton.disabled = true;
+    statusIndicator.textContent = 'Checking Permissions...';
+
+    // Explicit Microphone Permission Request
+    async function requestMicrophonePermission() {
+        try {
+            // First, try to get media devices
+            const stream = await navigator.mediaDevices.getUserMedia({ 
+                audio: {
+                    echoCancellation: true,
+                    noiseSuppression: true,
+                    autoGainControl: true
+                } 
+            });
+
+            // If successful, stop the stream
+            stream.getTracks().forEach(track => track.stop());
+
+            // Now check speech recognition support
+            if (!SpeechRecognition) {
+                throw new Error('Speech Recognition not supported in this browser');
+            }
+
+            // Enable start button
+            startButton.disabled = false;
+            statusIndicator.textContent = 'Ready';
+            statusIndicator.style.background = '#FFC107';
+
+            console.log('Microphone permission granted');
+            return true;
+        } catch (error) {
+            console.error('Microphone Permission Error:', error);
+            
+            // Detailed error messaging
+            let errorMessage = 'Microphone access denied. ';
+            if (error.name === 'NotAllowedError') {
+                errorMessage += 'Please enable microphone permissions in your browser settings.';
+            } else if (error.name === 'NotFoundError') {
+                errorMessage += 'No microphone devices found.';
+            } else {
+                errorMessage += error.message;
+            }
+
+            statusIndicator.textContent = 'Permission Denied';
+            statusIndicator.style.background = '#FF0000';
+            
+            alert(errorMessage);
+            return false;
+        }
     }
 
     // Speech Recognition Setup
@@ -73,7 +117,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function startAudioRecording() {
         try {
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            const stream = await navigator.mediaDevices.getUserMedia({ 
+                audio: {
+                    echoCancellation: true,
+                    noiseSuppression: true,
+                    autoGainControl: true
+                } 
+            });
             mediaRecorder = new MediaRecorder(stream);
             audioChunks = [];
 
@@ -120,8 +170,8 @@ document.addEventListener('DOMContentLoaded', () => {
         startButton.innerText = 'Start Call';
         startButton.disabled = false;
         endButton.disabled = true;
-        statusIndicator.textContent = 'Offline';
-        statusIndicator.style.background = 'rgba(255, 255, 255, 0.1)';
+        statusIndicator.textContent = 'Ready';
+        statusIndicator.style.background = '#FFC107';
         isListening = false;
 
         if (mediaRecorder && mediaRecorder.state !== 'inactive') {
@@ -149,6 +199,16 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // Initial Setup
-    initializeSpeechRecognition();
-    endButton.disabled = true;
+    async function initializeApp() {
+        // First, request microphone permissions
+        const permissionGranted = await requestMicrophonePermission();
+        
+        if (permissionGranted) {
+            initializeSpeechRecognition();
+            endButton.disabled = true;
+        }
+    }
+
+    // Start the initialization process
+    initializeApp();
 });
