@@ -1,239 +1,266 @@
-// app.js
-
 import { getRealTimeFeedback } from './api/vapi.js';
 
-let recognition;
-let isListening = false;
-let mediaRecorder;
-let audioChunks = [];
-let scene, camera, renderer, avatar;
+class SpeechAgent {
+    constructor() {
+        // DOM Elements
+        this.chatContainer = document.getElementById('chat-container');
+        this.startButton = document.getElementById('start-speech');
+        this.endButton = document.getElementById('end-speech');
+        this.downloadButton = document.getElementById('download-recording');
+        this.statusIndicator = document.getElementById('status-indicator');
 
-// Ensure the DOM is fully loaded before running the script
-document.addEventListener('DOMContentLoaded', () => {
-    // DOM Elements
-    const chatContainer = document.getElementById('chat-container');
-    const startButton = document.getElementById('start-speech');
-    const endButton = document.getElementById('end-speech');
-    const downloadButton = document.getElementById('download-recording');
-    const statusIndicator = document.getElementById('status-indicator');
+        // Speech and Recording Variables
+        this.recognition = null;
+        this.isListening = false;
+        this.mediaRecorder = null;
+        this.audioChunks = [];
 
-    // Check if all required DOM elements exist
-    if (!startButton || !endButton || !chatContainer || !statusIndicator || !downloadButton) {
-        console.error('One or more DOM elements not found:', {
-            startButton, endButton, chatContainer, statusIndicator, downloadButton
-        });
-        return;
+        // 3D Avatar Variables
+        this.scene = null;
+        this.camera = null;
+        this.renderer = null;
+        this.avatar = null;
+
+        this.init();
     }
 
-    // Initialize 3D Avatar
-    function init3DAvatar() {
+    init() {
+        if (!this.validateDOMElements()) return;
+
+        this.init3DAvatar();
+        this.initSpeechRecognition();
+        this.setupEventListeners();
+    }
+
+    validateDOMElements() {
+        const elements = [
+            this.chatContainer, 
+            this.startButton, 
+            this.endButton, 
+            this.statusIndicator, 
+            this.downloadButton
+        ];
+
+        const missingElements = elements.filter(el => !el);
+        if (missingElements.length > 0) {
+            console.error('Missing DOM elements:', missingElements);
+            alert('Application initialization failed. Some UI elements are missing.');
+            return false;
+        }
+        return true;
+    }
+
+    init3DAvatar() {
         try {
-            scene = new THREE.Scene();
-            camera = new THREE.PerspectiveCamera(75, 1, 0.1, 1000);
-            renderer = new THREE.WebGLRenderer({ alpha: true });
-            renderer.setSize(200, 200);
             const avatarScene = document.getElementById('avatar-scene');
-            if (avatarScene) {
-                avatarScene.appendChild(renderer.domElement);
-            } else {
+            if (!avatarScene) {
                 console.error('Avatar scene container not found');
                 return;
             }
 
+            this.scene = new THREE.Scene();
+            this.camera = new THREE.PerspectiveCamera(75, 1, 0.1, 1000);
+            this.renderer = new THREE.WebGLRenderer({ alpha: true });
+            this.renderer.setSize(200, 200);
+            avatarScene.appendChild(this.renderer.domElement);
+
             const geometry = new THREE.SphereGeometry(1, 32, 32);
-            const material = new THREE.MeshPhongMaterial({ color: 0x007bff });
-            avatar = new THREE.Mesh(geometry, material);
-            scene.add(avatar);
+            const material = new THREE.MeshPhongMaterial({ 
+                color: 0x007bff,
+                shininess: 100 
+            });
+            this.avatar = new THREE.Mesh(geometry, material);
+            this.scene.add(this.avatar);
 
             const light = new THREE.PointLight(0xffffff, 1, 100);
             light.position.set(5, 5, 5);
-            scene.add(light);
+            this.scene.add(light);
 
-            camera.position.z = 3;
-            animateAvatar();
+            this.camera.position.z = 3;
+            this.animateAvatar();
         } catch (error) {
             console.error('Failed to initialize 3D avatar:', error);
         }
     }
 
-    function animateAvatar() {
-        if (!renderer || !scene || !camera) return;
-        requestAnimationFrame(animateAvatar);
-        if (isListening) {
-            avatar.rotation.y += 0.02;
-            avatar.scale.set(
-                1 + Math.sin(Date.now() * 0.005) * 0.1,
-                1 + Math.cos(Date.now() * 0.005) * 0.1,
-                1
-            );
+    animateAvatar() {
+        if (!this.renderer || !this.scene || !this.camera) return;
+        
+        requestAnimationFrame(() => this.animateAvatar());
+        
+        if (this.isListening) {
+            this.avatar.rotation.y += 0.02;
+            const scale = 1 + Math.sin(Date.now() * 0.005) * 0.1;
+            this.avatar.scale.set(scale, scale, 1);
         }
-        renderer.render(scene, camera);
+        
+        this.renderer.render(this.scene, this.camera);
     }
 
-    // Initialize Speech Recognition
-    function initSpeechRecognition() {
+    initSpeechRecognition() {
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
-        if (SpeechRecognition) {
-            try {
-                recognition = new SpeechRecognition();
-                recognition.continuous = true;
-                recognition.interimResults = false;
-                recognition.lang = 'en-US';
+        if (!SpeechRecognition) {
+            console.error('Speech Recognition not supported');
+            this.showNotSupported();
+            return;
+        }
 
-                recognition.onstart = () => {
-                    console.log('Speech recognition started');
-                    startButton.innerText = 'Listening...';
-                    startButton.disabled = true;
-                    endButton.disabled = false;
-                    statusIndicator.innerText = 'Online';
-                    statusIndicator.style.background = '#28a745';
-                    startRecording();
-                };
+        try {
+            this.recognition = new SpeechRecognition();
+            this.recognition.continuous = true;
+            this.recognition.interimResults = false;
+            this.recognition.lang = 'en-US';
 
-                recognition.onend = () => {
-                    console.log('Speech recognition ended');
-                    startButton.innerText = 'Start Call';
-                    startButton.disabled = false;
-                    endButton.disabled = true;
-                    statusIndicator.innerText = 'Offline';
-                    statusIndicator.style.background = 'rgba(255, 255, 255, 0.1)';
-                    isListening = false;
-                    stopRecording();
-                };
-
-                recognition.onresult = async (event) => {
-                    try {
-                        const transcript = event.results[event.resultIndex][0].transcript;
-                        addChatMessage('You', transcript);
-                        const feedback = await getRealTimeFeedback(transcript);
-                        addChatMessage('AI Agent', feedback);
-                        speak(feedback);
-                    } catch (error) {
-                        console.error('Error processing speech result:', error);
-                        addChatMessage('AI Agent', 'Sorry, I encountered an error while processing your speech.');
-                    }
-                };
-
-                recognition.onerror = (event) => {
-                    console.error('Speech recognition error:', event.error);
-                    let errorMessage = '';
-                    switch (event.error) {
-                        case 'no-speech':
-                            errorMessage = 'No speech detected. Please try again.';
-                            break;
-                        case 'not-allowed':
-                        case 'service-not-allowed':
-                            errorMessage = 'Microphone access denied. Please enable microphone permissions in your browser settings.';
-                            break;
-                        case 'network':
-                            errorMessage = 'Network error. Please check your internet connection.';
-                            break;
-                        default:
-                            errorMessage = `Speech recognition error: ${event.error}`;
-                    }
-                    alert(errorMessage);
-                    recognition.stop();
-                };
-            } catch (error) {
-                console.error('Failed to initialize SpeechRecognition:', error);
-                alert('Failed to initialize speech recognition: ' + error.message);
-                startButton.disabled = true;
-            }
-        } else {
-            console.error('Speech Recognition not supported in this browser.');
-            alert('Your browser does not support Speech Recognition. Please use a modern browser like Chrome.');
-            startButton.disabled = true;
+            this.recognition.onstart = () => this.handleRecognitionStart();
+            this.recognition.onend = () => this.handleRecognitionEnd();
+            this.recognition.onresult = (event) => this.handleSpeechResult(event);
+            this.recognition.onerror = (event) => this.handleRecognitionError(event);
+        } catch (error) {
+            console.error('Speech Recognition initialization failed:', error);
+            this.showNotSupported();
         }
     }
 
-    // Initialize Audio Recording
-    async function startRecording() {
+    setupEventListeners() {
+        this.startButton.addEventListener('click', () => this.startCall());
+        this.endButton.addEventListener('click', () => this.endCall());
+    }
+
+    startCall() {
+        if (!this.recognition) {
+            alert('Speech recognition is not available.');
+            return;
+        }
+
+        try {
+            this.recognition.start();
+            this.isListening = true;
+            this.startRecording();
+        } catch (error) {
+            console.error('Failed to start call:', error);
+            alert('Failed to start the call. Please check microphone permissions.');
+        }
+    }
+
+    endCall() {
+        if (this.recognition) {
+            this.recognition.stop();
+        }
+        this.stopRecording();
+        this.resetUI();
+    }
+
+    async startRecording() {
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            mediaRecorder = new MediaRecorder(stream);
-            audioChunks = [];
+            this.mediaRecorder = new MediaRecorder(stream);
+            this.audioChunks = [];
 
-            mediaRecorder.ondataavailable = (event) => {
-                audioChunks.push(event.data);
+            this.mediaRecorder.ondataavailable = (event) => {
+                this.audioChunks.push(event.data);
             };
 
-            mediaRecorder.onstop = () => {
-                const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+            this.mediaRecorder.onstop = () => {
+                const audioBlob = new Blob(this.audioChunks, { type: 'audio/wav' });
                 const audioUrl = URL.createObjectURL(audioBlob);
-                downloadButton.href = audioUrl;
-                downloadButton.download = `conversation_${new Date().toISOString()}.wav`;
-                downloadButton.disabled = false;
+                this.downloadButton.href = audioUrl;
+                this.downloadButton.download = `conversation_${new Date().toISOString()}.wav`;
+                this.downloadButton.disabled = false;
             };
 
-            mediaRecorder.start();
+            this.mediaRecorder.start();
         } catch (error) {
             console.error('Recording failed:', error);
-            alert('Failed to start recording: ' + error.message);
+            alert('Failed to start recording. Please check microphone permissions.');
         }
     }
 
-    function stopRecording() {
-        if (mediaRecorder && mediaRecorder.state !== 'inactive') {
-            mediaRecorder.stop();
+    stopRecording() {
+        if (this.mediaRecorder && this.mediaRecorder.state !== 'inactive') {
+            this.mediaRecorder.stop();
         }
     }
 
-    // Event Listeners
-    startButton.addEventListener('click', () => {
+    async handleSpeechResult(event) {
         try {
-            if (!recognition) {
-                console.error('Speech recognition not initialized.');
-                alert('Speech recognition not available. Please check your browser support.');
-                return;
-            }
-            console.log('Starting speech recognition...');
-            recognition.start();
-            isListening = true;
+            const transcript = event.results[event.resultIndex][0].transcript;
+            this.addChatMessage('You', transcript);
+            
+            const feedback = await getRealTimeFeedback(transcript);
+            this.addChatMessage('AI Agent', feedback);
+            this.speak(feedback);
         } catch (error) {
-            console.error('Failed to start speech recognition:', error);
-            alert('Error starting speech recognition: ' + error.message);
+            console.error('Speech processing error:', error);
+            this.addChatMessage('AI Agent', 'Sorry, I encountered an error processing your speech.');
         }
-    });
+    }
 
-    endButton.addEventListener('click', () => {
-        try {
-            if (recognition) {
-                recognition.stop();
-                isListening = false;
-            }
-        } catch (error) {
-            console.error('Failed to stop speech recognition:', error);
-        }
-    });
+    handleRecognitionStart() {
+        this.startButton.innerText = 'Listening...';
+        this.startButton.disabled = true;
+        this.endButton.disabled = false;
+        this.statusIndicator.innerText = 'Online';
+        this.statusIndicator.style.background = '#28a745';
+    }
 
-    // Display messages in the chat UI
-    function addChatMessage(sender, message) {
+    handleRecognitionEnd() {
+        this.resetUI();
+    }
+
+    resetUI() {
+        this.startButton.innerText = 'Start Call';
+        this.startButton.disabled = false;
+        this.endButton.disabled = true;
+        this.statusIndicator.innerText = 'Offline';
+        this.statusIndicator.style.background = 'rgba(255, 255, 255, 0.1)';
+        this.isListening = false;
+    }
+
+    handleRecognitionError(event) {
+        console.error('Speech recognition error:', event.error);
+        let errorMessage = this.getRecognitionErrorMessage(event.error);
+        alert(errorMessage);
+        this.recognition.stop();
+    }
+
+    getRecognitionErrorMessage(error) {
+        const errorMessages = {
+            'no-speech': 'No speech detected. Please try again.',
+            'not-allowed': 'Microphone access denied. Please enable microphone permissions.',
+            'service-not-allowed': 'Microphone access denied. Please enable microphone permissions.',
+            'network': 'Network error. Please check your internet connection.',
+            'default': 'An unexpected error occurred during speech recognition.'
+        };
+        return errorMessages[error] || errorMessages['default'];
+    }
+
+    showNotSupported() {
+        alert('Your browser does not support Speech Recognition. Please use a modern browser like Chrome.');
+        this.startButton.disabled = true;
+    }
+
+    addChatMessage(sender, message) {
         const messageElement = document.createElement('div');
         messageElement.classList.add('chat-message', sender.toLowerCase().replace(' ', '-'));
         messageElement.innerHTML = `<strong>${sender}:</strong> ${message}`;
-        chatContainer.appendChild(messageElement);
-        chatContainer.scrollTop = chatContainer.scrollHeight;
+        this.chatContainer.appendChild(messageElement);
+        this.chatContainer.scrollTop = this.chatContainer.scrollHeight;
     }
 
-    // Text-to-speech for AI response
-    function speak(text) {
+    speak(text) {
         try {
             const utterance = new SpeechSynthesisUtterance(text);
             utterance.lang = 'en-US';
             utterance.rate = 1.0;
             speechSynthesis.speak(utterance);
         } catch (error) {
-            console.error('Failed to speak:', error);
+            console.error('Text-to-speech failed:', error);
         }
     }
+}
 
-    // Initialize everything
-    try {
-        init3DAvatar();
-        initSpeechRecognition();
-    } catch (error) {
-        console.error('Initialization failed:', error);
-        alert('Application initialization failed: ' + error.message);
-    }
+// Initialize the application when DOM is fully loaded
+document.addEventListener('DOMContentLoaded', () => {
+    new SpeechAgent();
 });
