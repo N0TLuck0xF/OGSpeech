@@ -3,17 +3,22 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>OGSpeech Coach</title>
+    <title>AI Speech Agent</title>
     <link rel="stylesheet" href="styles.css">
+    <!-- Include Three.js for 3D effects -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r134/three.min.js"></script>
 </head>
 <body>
     <div class="app-container">
-        <h1>OGSpeech Coach</h1>
-        <div id="chat-container" class="chat-box"></div>
-        <button id="start-speech">Start Coaching</button>
+        <div class="avatar-container" id="avatar-scene"></div>
+        <div class="chat-box" id="chat-container"></div>
+        <div class="controls">
+            <button id="start-speech" class="control-btn">Start Call</button>
+            <button id="end-speech" class="control-btn" disabled>End Call</button>
+            <button id="download-recording" class="control-btn" disabled>Download Recording</button>
+        </div>
+        <div class="status-indicator" id="status-indicator">Offline</div>
     </div>
     <script src="app.js" type="module"></script>
 </body>
 </html>
-
-
