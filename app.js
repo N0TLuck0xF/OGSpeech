@@ -1,214 +1,184 @@
-document.addEventListener('DOMContentLoaded', () => {
-    // DOM Element Selectors
-    const startButton = document.getElementById('start-speech');
-    const endButton = document.getElementById('end-speech');
-    const chatContainer = document.getElementById('chat-container');
-    const statusIndicator = document.getElementById('status-indicator');
-    const downloadButton = document.getElementById('download-recording');
+import { generateCoachingFeedback } from './coachingAI.js';
 
-    // Comprehensive Browser Support Check
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    
-    // Disable start button until permissions are checked
-    startButton.disabled = true;
-    statusIndicator.textContent = 'Checking Permissions...';
+class SpeechCoach {
+    constructor() {
+        // DOM Elements
+        this.startButton = document.getElementById('start-speech');
+        this.endButton = document.getElementById('end-speech');
+        this.chatContainer = document.getElementById('chat-container');
+        this.statusIndicator = document.getElementById('status-indicator');
+        this.downloadButton = document.getElementById('download-recording');
 
-    // Explicit Microphone Permission Request
-    async function requestMicrophonePermission() {
-        try {
-            // First, try to get media devices
-            const stream = await navigator.mediaDevices.getUserMedia({ 
-                audio: {
-                    echoCancellation: true,
-                    noiseSuppression: true,
-                    autoGainControl: true
-                } 
-            });
+        // Speech Recognition Setup
+        this.recognition = null;
+        this.speechSynthesis = window.speechSynthesis;
+        this.isListening = false;
 
-            // If successful, stop the stream
-            stream.getTracks().forEach(track => track.stop());
+        // Coaching Session Variables
+        this.coachingContext = {
+            totalSpeechTime: 0,
+            speechSegments: [],
+            feedbackHistory: [],
+            currentTopic: null
+        };
 
-            // Now check speech recognition support
-            if (!SpeechRecognition) {
-                throw new Error('Speech Recognition not supported in this browser');
-            }
-
-            // Enable start button
-            startButton.disabled = false;
-            statusIndicator.textContent = 'Ready';
-            statusIndicator.style.background = '#FFC107';
-
-            console.log('Microphone permission granted');
-            return true;
-        } catch (error) {
-            console.error('Microphone Permission Error:', error);
-            
-            // Detailed error messaging
-            let errorMessage = 'Microphone access denied. ';
-            if (error.name === 'NotAllowedError') {
-                errorMessage += 'Please enable microphone permissions in your browser settings.';
-            } else if (error.name === 'NotFoundError') {
-                errorMessage += 'No microphone devices found.';
-            } else {
-                errorMessage += error.message;
-            }
-
-            statusIndicator.textContent = 'Permission Denied';
-            statusIndicator.style.background = '#FF0000';
-            
-            alert(errorMessage);
-            return false;
-        }
+        this.initializeApplication();
     }
 
-    // Speech Recognition Setup
-    let recognition;
-    let mediaRecorder;
-    let audioChunks = [];
-    let isListening = false;
-
-    function initializeSpeechRecognition() {
-        try {
-            recognition = new SpeechRecognition();
-            recognition.continuous = true;
-            recognition.interimResults = false;
-            recognition.lang = 'en-US';
-
-            recognition.onstart = () => {
-                console.log('Speech recognition started');
-                startButton.innerText = 'Listening...';
-                startButton.disabled = true;
-                endButton.disabled = false;
-                statusIndicator.textContent = 'Online';
-                statusIndicator.style.background = '#28a745';
-                isListening = true;
-                startAudioRecording();
-            };
-
-            recognition.onresult = async (event) => {
-                try {
-                    const transcript = event.results[event.resultIndex][0].transcript;
-                    addMessage('You', transcript);
-                    
-                    // Simulated AI response
-                    const response = await getMockAIResponse(transcript);
-                    addMessage('AI', response);
-                } catch (error) {
-                    console.error('Speech processing error:', error);
-                    addMessage('System', 'Error processing speech');
-                }
-            };
-
-            recognition.onerror = (event) => {
-                console.error('Speech Recognition Error:', event.error);
-                alert(`Speech Recognition Error: ${event.error}`);
-                resetUI();
-            };
-
-            recognition.onend = () => {
-                console.log('Speech recognition ended');
-                resetUI();
-            };
-        } catch (error) {
-            console.error('Failed to initialize speech recognition:', error);
-            alert('Failed to initialize speech recognition. Check console for details.');
-        }
+    initializeApplication() {
+        this.setupSpeechRecognition();
+        this.setupEventListeners();
     }
 
-    async function startAudioRecording() {
-        try {
-            const stream = await navigator.mediaDevices.getUserMedia({ 
-                audio: {
-                    echoCancellation: true,
-                    noiseSuppression: true,
-                    autoGainControl: true
-                } 
-            });
-            mediaRecorder = new MediaRecorder(stream);
-            audioChunks = [];
-
-            mediaRecorder.ondataavailable = (event) => {
-                audioChunks.push(event.data);
-            };
-
-            mediaRecorder.onstop = () => {
-                const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
-                const audioUrl = URL.createObjectURL(audioBlob);
-                downloadButton.href = audioUrl;
-                downloadButton.download = `recording_${new Date().toISOString()}.wav`;
-                downloadButton.disabled = false;
-            };
-
-            mediaRecorder.start();
-        } catch (error) {
-            console.error('Audio recording failed:', error);
-            alert('Failed to start audio recording. Ensure microphone permissions are granted.');
-        }
-    }
-
-    async function getMockAIResponse(text) {
-        const responses = [
-            "That sounds interesting.",
-            "Could you tell me more about that?",
-            "I'm listening carefully.",
-            "What made you think of that?",
-            "Interesting perspective!"
-        ];
-        await new Promise(resolve => setTimeout(resolve, 500));
-        return responses[Math.floor(Math.random() * responses.length)];
-    }
-
-    function addMessage(sender, message) {
-        const messageElement = document.createElement('div');
-        messageElement.classList.add('chat-message', sender.toLowerCase());
-        messageElement.innerHTML = `<strong>${sender}:</strong> ${message}`;
-        chatContainer.appendChild(messageElement);
-        chatContainer.scrollTop = chatContainer.scrollHeight;
-    }
-
-    function resetUI() {
-        startButton.innerText = 'Start Call';
-        startButton.disabled = false;
-        endButton.disabled = true;
-        statusIndicator.textContent = 'Ready';
-        statusIndicator.style.background = '#FFC107';
-        isListening = false;
-
-        if (mediaRecorder && mediaRecorder.state !== 'inactive') {
-            mediaRecorder.stop();
-        }
-    }
-
-    // Event Listeners
-    startButton.addEventListener('click', () => {
-        try {
-            console.log('Start button clicked');
-            recognition.start();
-        } catch (error) {
-            console.error('Failed to start recognition:', error);
-            alert('Failed to start call. Check browser compatibility and microphone permissions.');
-        }
-    });
-
-    endButton.addEventListener('click', () => {
-        try {
-            recognition.stop();
-        } catch (error) {
-            console.error('Failed to end recognition:', error);
-        }
-    });
-
-    // Initial Setup
-    async function initializeApp() {
-        // First, request microphone permissions
-        const permissionGranted = await requestMicrophonePermission();
+    setupSpeechRecognition() {
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
         
-        if (permissionGranted) {
-            initializeSpeechRecognition();
-            endButton.disabled = true;
+        if (!SpeechRecognition) {
+            this.showError('Speech recognition not supported in your browser');
+            return;
+        }
+
+        this.recognition = new SpeechRecognition();
+        this.recognition.continuous = true;
+        this.recognition.interimResults = false;
+        this.recognition.lang = 'en-US';
+
+        this.recognition.onstart = () => this.onRecognitionStart();
+        this.recognition.onresult = (event) => this.processSpeeches(event);
+        this.recognition.onerror = (event) => this.handleRecognitionError(event);
+        this.recognition.onend = () => this.endCoachingSession();
+    }
+
+    setupEventListeners() {
+        this.startButton.addEventListener('click', () => this.startCoachingSession());
+        this.endButton.addEventListener('click', () => this.endCoachingSession());
+    }
+
+    async startCoachingSession() {
+        try {
+            // Request microphone permissions
+            await navigator.mediaDevices.getUserMedia({ audio: true });
+
+            // Start recognition
+            this.recognition.start();
+
+            // Initial coaching greeting
+            this.speakCoachMessage('Welcome to your public speaking coaching session. I\'m here to help you improve your communication skills. Would you like to practice a specific type of speech or presentation?');
+        } catch (error) {
+            this.showError('Failed to start coaching session. Check microphone permissions.');
         }
     }
 
-    // Start the initialization process
-    initializeApp();
+    processSpeeches(event) {
+        const speechResult = event.results[event.resultIndex][0].transcript;
+        this.addChatMessage('You', speechResult);
+
+        // Generate coaching feedback
+        this.provideCoachingFeedback(speechResult);
+    }
+
+    async provideCoachingFeedback(speechText) {
+        try {
+            // Generate AI coaching feedback
+            const coachingFeedback = await generateCoachingFeedback(speechText);
+            
+            // Display and speak feedback
+            this.addChatMessage('Coach', coachingFeedback);
+            this.speakCoachMessage(coachingFeedback);
+
+            // Update coaching context
+            this.updateCoachingContext(speechText, coachingFeedback);
+        } catch (error) {
+            console.error('Coaching feedback generation error:', error);
+            this.speakCoachMessage('I encountered an error processing your speech. Could you please try again?');
+        }
+    }
+
+    updateCoachingContext(speechText, feedback) {
+        this.coachingContext.speechSegments.push({
+            text: speechText,
+            timestamp: new Date(),
+            feedback: feedback
+        });
+    }
+
+    speakCoachMessage(message) {
+        // Text-to-Speech implementation
+        const utterance = new SpeechSynthesisUtterance(message);
+        utterance.rate = 0.9; // Slightly slower for clarity
+        utterance.pitch = 1.0;
+        this.speechSynthesis.speak(utterance);
+    }
+
+    onRecognitionStart() {
+        this.isListening = true;
+        this.startButton.disabled = true;
+        this.endButton.disabled = false;
+        this.statusIndicator.textContent = 'Coaching Session Active';
+        this.statusIndicator.style.background = '#28a745';
+    }
+
+    endCoachingSession() {
+        if (this.recognition) {
+            this.recognition.stop();
+        }
+        
+        this.isListening = false;
+        this.startButton.disabled = false;
+        this.endButton.disabled = true;
+        this.statusIndicator.textContent = 'Session Ended';
+        this.statusIndicator.style.background = 'rgba(255, 255, 255, 0.1)';
+
+        // Provide summary of coaching session
+        this.provideFinalCoachingSummary();
+    }
+
+    provideFinalCoachingSummary() {
+        const summary = `
+            Coaching Session Summary:
+            - Total Speech Segments: ${this.coachingContext.speechSegments.length}
+            - Key Areas for Improvement: ${this.extractKeyImprovementAreas()}
+        `;
+        
+        this.speakCoachMessage(summary);
+        this.addChatMessage('Coach', summary);
+    }
+
+    extractKeyImprovementAreas() {
+        // Basic implementation - in a real scenario, this would be more sophisticated
+        const commonFeedback = this.coachingContext.speechSegments
+            .map(segment => segment.feedback)
+            .join(' ');
+        
+        const improvementAreas = [];
+        
+        if (commonFeedback.includes('pace')) improvementAreas.push('Speaking Pace');
+        if (commonFeedback.includes('clarity')) improvementAreas.push('Pronunciation Clarity');
+        if (commonFeedback.includes('filler words')) improvementAreas.push('Reducing Filler Words');
+
+        return improvementAreas.join(', ') || 'No specific areas identified';
+    }
+
+    handleRecognitionError(event) {
+        console.error('Speech recognition error:', event.error);
+        this.speakCoachMessage(`I'm sorry, there was an error: ${event.error}. Could you please try again?`);
+    }
+
+    showError(message) {
+        this.addChatMessage('System', message);
+        this.speakCoachMessage(message);
+    }
+
+    addChatMessage(sender, message) {
+        const messageElement = document.createElement('div');
+        messageElement.classList.add('chat-message', sender.toLowerCase().replace(' ', '-'));
+        messageElement.innerHTML = `<strong>${sender}:</strong> ${message}`;
+        this.chatContainer.appendChild(messageElement);
+        this.chatContainer.scrollTop = this.chatContainer.scrollHeight;
+    }
+}
+
+// Instantiate the Speech Coach when DOM is loaded
+document.addEventListener('DOMContentLoaded', () => {
+    new SpeechCoach();
 });
