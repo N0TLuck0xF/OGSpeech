@@ -1,77 +1,70 @@
+// Import the function to call the VAPI API
+import { getRealTimeFeedback } from './api/vapi.js';
+
 let recognition;
 let isListening = false;
+
 const feedbackArea = document.getElementById('feedback');
 const speechTextArea = document.getElementById('speech-text');
 const startButton = document.getElementById('start-speech');
 
-// Initialize the SpeechRecognition API
+// Initialize Speech Recognition
 function initSpeechRecognition() {
-    // Check for browser compatibility (SpeechRecognition is only supported in some browsers)
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
     if (SpeechRecognition) {
         recognition = new SpeechRecognition();
-        recognition.continuous = true; // Enable continuous listening
-        recognition.interimResults = true; // Show results while speaking
+        recognition.continuous = true;
+        recognition.interimResults = true;
+        recognition.lang = 'en-US'; // Set language to English (change as needed)
 
         recognition.onstart = () => {
             console.log('Speech recognition started');
             startButton.innerText = 'Listening...';
+            startButton.classList.add('active');
         };
 
         recognition.onend = () => {
             console.log('Speech recognition ended');
-            startButton.innerText = 'Start Listening';
+            startButton.innerText = 'Start Coaching';
+            startButton.classList.remove('active');
+            isListening = false;
         };
 
-        recognition.onresult = (event) => {
-            // Process speech result (transcription)
+        recognition.onresult = async (event) => {
             let transcript = '';
-            let feedback = '';
+
             for (let i = event.resultIndex; i < event.results.length; i++) {
                 transcript += event.results[i][0].transcript;
             }
 
-            // Update the UI with the spoken text
+            // Update UI with spoken text
             speechTextArea.value = transcript;
 
-            // Call VAPI API for feedback with real-time text
-            feedback = getRealTimeFeedback(transcript);
+            // Send speech text to VAPI API for feedback
+            const feedback = await getRealTimeFeedback(transcript);
             feedbackArea.textContent = `Feedback: ${feedback}`;
         };
 
         recognition.onerror = (event) => {
             console.error('Speech recognition error:', event.error);
+            feedbackArea.textContent = 'Error: Please try again!';
         };
     } else {
-        alert('Speech recognition is not supported in your browser.');
+        alert('Your browser does not support Speech Recognition.');
     }
 }
 
-// Real-time feedback function that sends text to VAPI
-async function getRealTimeFeedback(text) {
-    // Assuming `text` is the transcribed speech that you want to analyze
-    const response = await fetch('https://your-vapi-endpoint.com/analyze', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ text: text })
-    });
-
-    const data = await response.json();
-    return data.feedback; // Assuming the API returns feedback
-}
-
-// Toggle Speech Recognition on or off
+// Toggle Speech Recognition On/Off
 startButton.addEventListener('click', () => {
     if (isListening) {
         recognition.stop();
-        isListening = false;
     } else {
         recognition.start();
-        isListening = true;
     }
+    isListening = !isListening;
 });
 
-// Initialize the SpeechRecognition API when the page loads
+// Initialize the SpeechRecognition API
 initSpeechRecognition();
+
