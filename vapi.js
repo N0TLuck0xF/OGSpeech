@@ -7,7 +7,7 @@ export async function getRealTimeFeedback(text) {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'Authorization': `a9777649-f7b1-4464-a564-fda4f8b620de`, // Optional: if VAPI requires an API key
+                'Authorization': `68316f9a-fc2b-4bc0-8bec-785999f5c567`, // Optional: if VAPI requires an API key
             },
             body: JSON.stringify({ text: text })  // Send the speech text to the API
         });
