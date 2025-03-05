@@ -4,8 +4,7 @@ import { getRealTimeFeedback } from './api/vapi.js';
 let recognition;
 let isListening = false;
 
-const feedbackArea = document.getElementById('feedback');
-const speechTextArea = document.getElementById('speech-text');
+const chatContainer = document.getElementById('chat-container');
 const startButton = document.getElementById('start-speech');
 
 // Initialize Speech Recognition
@@ -15,8 +14,8 @@ function initSpeechRecognition() {
     if (SpeechRecognition) {
         recognition = new SpeechRecognition();
         recognition.continuous = true;
-        recognition.interimResults = true;
-        recognition.lang = 'en-US'; // Set language to English (change as needed)
+        recognition.interimResults = false;
+        recognition.lang = 'en-US';
 
         recognition.onstart = () => {
             console.log('Speech recognition started');
@@ -32,23 +31,13 @@ function initSpeechRecognition() {
         };
 
         recognition.onresult = async (event) => {
-            let transcript = '';
-
-            for (let i = event.resultIndex; i < event.results.length; i++) {
-                transcript += event.results[i][0].transcript;
-            }
-
-            // Update UI with spoken text
-            speechTextArea.value = transcript;
-
-            // Send speech text to VAPI API for feedback
+            const transcript = event.results[event.resultIndex][0].transcript;
+            addChatMessage('You', transcript);
+            
+            // Send speech text to VAPI API for chat response
             const feedback = await getRealTimeFeedback(transcript);
-            feedbackArea.textContent = `Feedback: ${feedback}`;
-        };
-
-        recognition.onerror = (event) => {
-            console.error('Speech recognition error:', event.error);
-            feedbackArea.textContent = 'Error: Please try again!';
+            addChatMessage('Coach', feedback);
+            speak(feedback);
         };
     } else {
         alert('Your browser does not support Speech Recognition.');
@@ -65,6 +54,23 @@ startButton.addEventListener('click', () => {
     isListening = !isListening;
 });
 
+// Display messages in the chat UI
+function addChatMessage(sender, message) {
+    const messageElement = document.createElement('div');
+    messageElement.classList.add('chat-message', sender.toLowerCase());
+    messageElement.innerHTML = `<strong>${sender}:</strong> ${message}`;
+    chatContainer.appendChild(messageElement);
+    chatContainer.scrollTop = chatContainer.scrollHeight;
+}
+
+// Convert text-to-speech for VAPI's response
+function speak(text) {
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = 'en-US';
+    speechSynthesis.speak(utterance);
+}
+
 // Initialize the SpeechRecognition API
 initSpeechRecognition();
+
 
